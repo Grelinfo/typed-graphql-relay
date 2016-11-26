@@ -1,6 +1,6 @@
 declare module "graphql-relay" {
 
-// connection/connection.js
+
 
     import {
         GraphQLBoolean,
@@ -10,26 +10,45 @@ declare module "graphql-relay" {
         GraphQLObjectType,
         GraphQLString,
         GraphQLFieldConfig,
-        InputObjectConfigFieldMap,
+        GraphQLInputFieldConfigMap,
         GraphQLFieldConfigMap,
         GraphQLFieldConfigArgumentMap,
         GraphQLResolveInfo,
         GraphQLInterfaceType,
         GraphQLInputType,
-        GraphQLOutputType
+        GraphQLOutputType,
+        GraphQLFieldResolver,
+        GraphQLTypeResolver,
+        Thunk
     } from "graphql";
 
-    export var forwardConnectionArgs: GraphQLFieldConfigArgumentMap;
-    export var backwardConnectionArgs: GraphQLFieldConfigArgumentMap;
-    export var connectionArgs: GraphQLFieldConfigArgumentMap;
+// connection/connection.js
+
+    /**
+     * Returns a GraphQLFieldConfigArgumentMap appropriate to include on a field
+     * whose return type is a connection type with forward pagination.
+     */
+    export const forwardConnectionArgs: GraphQLFieldConfigArgumentMap;
+
+    /**
+     * Returns a GraphQLFieldConfigArgumentMap appropriate to include on a field
+     * whose return type is a connection type with backward pagination.
+     */
+    export const backwardConnectionArgs: GraphQLFieldConfigArgumentMap;
+
+    /**
+     * Returns a GraphQLFieldConfigArgumentMap appropriate to include on a field
+     * whose return type is a connection type with bidirectional pagination.
+     */
+    export const  connectionArgs: GraphQLFieldConfigArgumentMap;
 
     type ConnectionConfig = {
-        name?: string,
+        name?: string | null,
         nodeType: GraphQLObjectType,
-        resolveNode?: Function,
-        resolveCursor?: Function,
-        edgeFields?: (() => GraphQLFieldConfigMap) | GraphQLFieldConfigMap,
-        connectionFields?: (() => GraphQLFieldConfigMap) | GraphQLFieldConfigMap
+        resolveNode?: GraphQLFieldResolver<any, any> | null,
+        resolveCursor?: GraphQLFieldResolver<any, any> | null,
+        edgeFields?: Thunk<GraphQLFieldConfigMap<any, any>> | null,
+        connectionFields?: Thunk<GraphQLFieldConfigMap<any, any>> | null
     };
 
     type GraphQLConnectionDefinitions = {
@@ -37,6 +56,10 @@ declare module "graphql-relay" {
         connectionType: GraphQLObjectType
     };
 
+    /**
+     * Returns a GraphQLObjectType for a connection with the given name,
+     * and whose nodes are of the specified type.
+     */
     export function connectionDefinitions(
         config: ConnectionConfig
     ): GraphQLConnectionDefinitions;
@@ -61,7 +84,7 @@ declare module "graphql-relay" {
     /**
      * A flow type designed to be exposed as a `Connection` over GraphQL.
      */
-    type Connection<T> = {
+    export type Connection<T> = {
         edges: Array<Edge<T>>;
         pageInfo: PageInfo;
     };
@@ -166,25 +189,47 @@ declare module "graphql-relay" {
 
 // mutation/mutation.js
 
-    type mutationFn = ((Object, GraphQLResolveInfo) => Object) |
-        ((Object, GraphQLResolveInfo) => Promise<Object>);
+    type mutationFn = (
+        object: any,
+        ctx: any,
+        info: GraphQLResolveInfo
+    ) => Promise<any> | any;
 
+    /**
+     * A description of a mutation consumable by mutationWithClientMutationId
+     * to create a GraphQLFieldConfig for that mutation.
+     *
+     * The inputFields and outputFields should not include `clientMutationId`,
+     * as this will be provided automatically.
+     *
+     * An input object will be created containing the input fields, and an
+     * object will be created containing the output fields.
+     *
+     * mutateAndGetPayload will receieve an Object with a key for each
+     * input field, and it should return an Object with a key for each
+     * output field. It may return synchronously, or return a Promise.
+     */
     type MutationConfig = {
         name: string,
-        inputFields: InputObjectConfigFieldMap,
-        outputFields: GraphQLFieldConfigMap,
-        mutateAndGetPayload: mutationFn
+        description?: string
+        inputFields: Thunk<GraphQLInputFieldConfigMap>,
+        outputFields: Thunk<GraphQLFieldConfigMap<any, any>>,
+        mutateAndGetPayload: mutationFn,
     };
 
+    /**
+     * Returns a GraphQLFieldConfig for the mutation described by the
+     * provided MutationConfig.
+     */
     export function mutationWithClientMutationId(
         config: MutationConfig
-    ): GraphQLFieldConfig;
+    ): GraphQLFieldConfig<any, any>;
 
 // node/node.js
 
     type GraphQLNodeDefinitions = {
         nodeInterface: GraphQLInterfaceType,
-        nodeField: GraphQLFieldConfig
+        nodeField: GraphQLFieldConfig<any, any>
     };
 
     type typeResolverFn = ((any) => GraphQLObjectType) |
@@ -200,21 +245,21 @@ declare module "graphql-relay" {
      * handled with the `isTypeOf` method on object types, as with any GraphQL
      * interface without a provided `resolveType` method.
      */
-    export function nodeDefinitions(
-        idFetcher: ((id: string, context: any, info: GraphQLResolveInfo) => any),
-        typeResolver?: typeResolverFn
+    export function nodeDefinitions<TContext>(
+        idFetcher: ((id: string, context: TContext, info: GraphQLResolveInfo) => any),
+        typeResolver?: GraphQLTypeResolver<any, TContext>
     ): GraphQLNodeDefinitions;
+
+    type ResolvedGlobalId = {
+        type: string,
+        id: string
+    };
 
     /**
      * Takes a type name and an ID specific to that type name, and returns a
      * "global ID" that is unique among all types.
      */
     export function toGlobalId(type: string, id: string): string;
-
-    type ResolvedGlobalId = {
-        type: string,
-        id: string
-    };
 
     /**
      * Takes the "global ID" created by toGlobalID, and returns the type name and ID
@@ -230,9 +275,8 @@ declare module "graphql-relay" {
      */
     export function globalIdField(
         typeName?: string,
-        idFetcher?: (object: any, info: GraphQLResolveInfo) => string
-    ): GraphQLFieldConfig;
-
+        idFetcher?: (object: any, context:any, info: GraphQLResolveInfo) => string
+    ): GraphQLFieldConfig<any, any>;
 
 
 // node/plural.js
@@ -241,12 +285,11 @@ declare module "graphql-relay" {
         argName: string,
         inputType: GraphQLInputType,
         outputType: GraphQLOutputType,
-        resolveSingleInput: (input: any, info: GraphQLResolveInfo) => any,
+        resolveSingleInput: (input: any, context:any, info: GraphQLResolveInfo) => any,
         description?: string,
     };
 
     export function pluralIdentifyingRootField(
         config: PluralIdentifyingRootFieldConfig
-    ): GraphQLFieldConfig;
-
+    ): GraphQLFieldConfig<any, any>;
 }
